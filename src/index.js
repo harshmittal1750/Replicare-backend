@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import Session from "express-session";
+
 import { generateNonce, SiweMessage } from "siwe";
 const PORT = process.env.PORT || 3001;
 
@@ -12,21 +14,44 @@ app.use(
     origin: "*",
   })
 );
+app.use(
+  Session({
+    name: "Replicare",
+    secret: process.env.SECRET,
+    resave: true,
+    saveUninitialized: true,
+    cookie: { secure: false, sameSite: true },
+  })
+);
 
-app.get("/nonce", async (req, res) => {
+app.post("/nonce", async (req, res) => {
   try {
-    res.setHeader("Content-Type", "application/json");
+    const { walletAddress, statement, domain } = req.body;
 
-    const nonce = await generateNonce();
+    req.session.nonce = generateNonce();
 
-    res.status(200).json({
-      status: true,
-      data: nonce,
-    });
+    if (req.session.nonce !== undefined && req.session.nonce) {
+      const message = new SiweMessage({
+        domain: domain,
+        address: walletAddress,
+        statement: statement,
+        uri: domain,
+        version: "1",
+        chainId: 10,
+        nonce: req.session.nonce,
+      });
+
+      if (message !== undefined) {
+        res.status(200).json({
+          status: true,
+          data: message.prepareMessage(),
+        });
+      }
+    }
   } catch (error) {
     res.status(400).json({
       status: false,
-      error: error,
+      error: error.message,
     });
   }
 });
@@ -34,19 +59,27 @@ app.get("/nonce", async (req, res) => {
 app.post("/verify", async (req, res) => {
   try {
     const { message, signature } = req.body;
+    if (!message) {
+      res
+        .status(422)
+        .json({ message: "Expected prepareMessage object as body." });
+      return;
+    }
     const siweMessage = new SiweMessage(message);
-    const data = await siweMessage.verify({ signature });
 
-    res.setHeader("Content-Type", "application/json");
+    const dataVar = await siweMessage.verify({ signature });
+    console.log(dataVar);
 
-    res.status(200).json({
-      status: true,
-      data: "something",
-    });
+    if (dataVar) {
+      res.status(200).json({
+        status: true,
+        data: dataVar,
+      });
+    }
   } catch (error) {
     res.status(400).json({
       status: false,
-      error: error,
+      error: error.message,
     });
   }
 });
