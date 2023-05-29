@@ -1,8 +1,11 @@
+import { config } from "dotenv";
+config();
 import cors from "cors";
 import express from "express";
 import Session from "express-session";
 
 import { generateNonce, SiweMessage } from "siwe";
+
 const PORT = process.env.PORT || 3001;
 
 const app = express();
@@ -14,6 +17,7 @@ app.use(
     origin: "*",
   })
 );
+
 app.use(
   Session({
     name: "Replicare",
@@ -46,7 +50,11 @@ app.post("/nonce", async (req, res) => {
           status: true,
           data: message.prepareMessage(),
         });
+      } else {
+        throw new Error("Error in generating message");
       }
+    } else {
+      throw new Error("Error in generating nonce");
     }
   } catch (error) {
     res.status(400).json({
